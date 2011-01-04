@@ -19,34 +19,19 @@
  * Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org.
  */
-package org.jboss.osgi.framework.plugin;
+package org.jboss.osgi.framework.plugin.internal;
 
-import org.osgi.service.startlevel.StartLevel;
+import java.net.URLStreamHandler;
 
 /**
- * The start level plugin implements the standard OSGi Start Level service
- * and adds synchronous versions for moving the system start level which
- * are used internally.
- * 
  * @author <a href="david@redhat.com">David Bosschaert</a>
  */
-public interface StartLevelPlugin extends Plugin, StartLevel
+public class URLStreamHandlerFactory implements java.net.URLStreamHandlerFactory
 {
-   static final int BUNDLE_STARTLEVEL_UNSPECIFIED = -1;
-
-   /**
-    * Increase the start level to the specified level. 
-    * This method moves to the specified start level in the current thread and
-    * returns when the desired start level has been reached.
-    * @param level the target start level.
-    */
-   void increaseStartLevel(int level);
-
-   /**
-    * Decrease the start level to the specified level.
-    * This method moves to the specified start level in the current thread and
-    * returns when the desired start level has been reached.
-    * @param level the target start level.
-    */
-   void decreaseStartLevel(int level);
+   @Override
+   public URLStreamHandler createURLStreamHandler(String protocol)
+   {
+      System.out.println("******* Request for: " + protocol);
+      return null;
+   }
 }

@@ -25,9 +25,13 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 
 import java.io.InputStream;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.net.URL;
 
+import org.jboss.modules.Module;
+import org.jboss.modules.ModuleIdentifier;
 import org.jboss.osgi.testing.OSGiFrameworkTest;
 import org.jboss.osgi.testing.OSGiManifestBuilder;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
@@ -228,4 +232,40 @@ public class ModuleServiceTestCase extends OSGiFrameworkTest
       archive.addClasses(ModuleActivatorB.class, ModuleServiceB.class);
       return archive;
    }
+
+   // Temp
+   @Test
+   public void testURLHandling() throws Exception
+   {
+      /* Map<String, String> props = new HashMap<String, String>();
+      props.put("org.osgi.framework.storage", "target/osgi-store");
+      props.put("org.osgi.framework.storage.clean", "onFirstInit");
+
+      FrameworkFactory factory = ServiceLoader.loadService(FrameworkFactory.class);
+      Framework framework = factory.newFramework(props);
+      framework.start(); */
+      Bundle moduleAS = installBundle(getModuleAS());
+      try
+      {
+         moduleAS.start();
+
+         Field field = URL.class.getDeclaredField("factory");
+         field.setAccessible(true);
+         Object obj = field.get(null);
+         System.out.println("*** " + obj);
+         Method meth = obj.getClass().getDeclaredMethod("createURLStreamHandler", String.class);
+         meth.setAccessible(true);
+         Object h = meth.invoke(obj, "protocol1");
+         System.out.println("*** " + h);
+
+         final ModuleIdentifier identifier = ModuleIdentifier.fromString("org.jboss.osgi.framework");
+         Module osgiModule = Module.getSystemModuleLoader().loadModule(identifier);
+         System.out.println("*** " + osgiModule);
+      }
+      finally
+      {
+         moduleAS.uninstall();
+      }
+   }
+
 }
