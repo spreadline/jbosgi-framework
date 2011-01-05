@@ -21,6 +21,11 @@
  */
 package org.jboss.osgi.framework.plugin.internal;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.URL;
+import java.net.URLConnection;
 import java.net.URLStreamHandler;
 
 /**
@@ -32,6 +37,41 @@ public class URLStreamHandlerFactory implements java.net.URLStreamHandlerFactory
    public URLStreamHandler createURLStreamHandler(String protocol)
    {
       System.out.println("******* Request for: " + protocol);
+      if ("protocol1".equals(protocol))
+      {
+         return new Protocol1Handler();
+      }
       return null;
+   }
+
+   private static final class Protocol1Handler extends URLStreamHandler
+   {
+
+      @Override
+      protected URLConnection openConnection(URL u) throws IOException
+      {
+         return new Protocol1URLConnection(u);
+      }
+
+   }
+
+   private static final class Protocol1URLConnection extends URLConnection
+   {
+
+      public Protocol1URLConnection(URL u)
+      {
+         super(u);
+      }
+
+      @Override
+      public void connect() throws IOException
+      {
+      }
+
+      @Override
+      public InputStream getInputStream() throws IOException
+      {
+         return new ByteArrayInputStream("XYZ".getBytes());
+      }
    }
 }

@@ -32,9 +32,16 @@ import org.junit.Test;
 public class URLHandlerTestCase extends OSGiFrameworkTest
 {
    @Test
-   public void testURLHandling2() throws Exception
+   public void testURLHandling() throws Exception
    {
       URL url = new URL("protocol1://blahdiblah");
+      System.out.println("Result: " + new String(Streams.suck(url.openStream())));
+   }
 
+   @Test
+   public void testURLHandling2() throws Exception
+   {
+      URL url = new URL("protocol2://blahdiblah");
+      System.out.println("Result: " + new String(Streams.suck(url.openStream())));
    }
 }
