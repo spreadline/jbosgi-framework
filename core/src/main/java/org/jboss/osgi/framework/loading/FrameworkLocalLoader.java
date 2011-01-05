@@ -21,6 +21,9 @@
 */
 package org.jboss.osgi.framework.loading;
 
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import org.jboss.modules.LocalLoader;
@@ -35,14 +38,31 @@ import org.jboss.osgi.framework.plugin.SystemPackagesPlugin;
  */
 public class FrameworkLocalLoader extends SystemLocalLoader
 {
+   private final Set<String> loaderPaths;
+
    public FrameworkLocalLoader(BundleManager bundleManager)
    {
       super(getExportedPaths(bundleManager));
+
+      SystemPackagesPlugin plugin = bundleManager.getPlugin(SystemPackagesPlugin.class);
+      List<String> pkgs = plugin.getSystemPackages();
+      Set<String> paths = new HashSet<String>(pkgs.size());
+
+      for (String pkg : pkgs)
+      {
+         paths.add(pkg.replace('.', '/'));
+      }
+      loaderPaths = Collections.unmodifiableSet(paths);
    }
 
    private static Set<String> getExportedPaths(BundleManager bundleManager)
    {
       SystemPackagesPlugin plugin = bundleManager.getPlugin(SystemPackagesPlugin.class);
       return plugin.getExportedPaths();
+   }
+
+   public Set<String> getLoaderPaths()
+   {
+      return loaderPaths;
    }
 }
