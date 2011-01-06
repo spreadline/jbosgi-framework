@@ -21,10 +21,8 @@
  */
 package org.jboss.osgi.framework.plugin.internal;
 
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
-import java.util.concurrent.ConcurrentMap;
+import java.util.Map;
 
 import org.jboss.modules.Module;
 import org.jboss.modules.ModuleIdentifier;
@@ -40,17 +38,12 @@ import org.jboss.osgi.framework.plugin.URLHandlerPlugin;
  */
 public class URLHandlerPluginImpl extends AbstractPlugin implements URLHandlerPlugin
 {
-   // This is part of the hack in startPlugin() to make the module system aware of the Framework Module
-   // It needs to be stored in a strong reference otherwise it will get garbage collected...
-   // BTW this is only needed in standalone mode, not when running in AS7...
-   // TODO: fix!
-   private Object futureModuleStrongReference;
-
    public URLHandlerPluginImpl(BundleManager bundleManager)
    {
       super(bundleManager);
    }
 
+   @SuppressWarnings({ "unchecked", "rawtypes" })
    @Override
    public void startPlugin()
    {
@@ -62,20 +55,19 @@ public class URLHandlerPluginImpl extends AbstractPlugin implements URLHandlerPl
       {
          try
          {
+            // TODO the OSGiModuleLoader is aware of our system module but the system module loader isn't
+            // this causes issues in standalone mode because the ModularURLStreamHandlerFactory looks for the 
+            // module in the System Module Loader. 
             // Terrible hack to make the module system aware of the OSGi framework module
-            Class<?> fmc = getClass().getClassLoader().loadClass(ModuleLoader.class.getName() + "$FutureModule");
-            Constructor<?> ctor = fmc.getDeclaredConstructor(ModuleIdentifier.class);
-            ctor.setAccessible(true);
-            futureModuleStrongReference = ctor.newInstance(frameworkModuleIdentifier);
-            Method setMethod = fmc.getDeclaredMethod("setModule", Module.class);
-            setMethod.setAccessible(true);
-            setMethod.invoke(futureModuleStrongReference, frameworkModule);
+            Field keyField = Module.class.getDeclaredField("myKey");
+            keyField.setAccessible(true);
+            Object fm = keyField.get(frameworkModule);
 
             Field mmapf = ModuleLoader.class.getDeclaredField("moduleMap");
             mmapf.setAccessible(true);
             ModuleLoader moduleLoader = getBundleManager().getSystemModuleLoader();
-            ConcurrentMap mmap = (ConcurrentMap)mmapf.get(moduleLoader);
-            mmap.put(frameworkModuleIdentifier, futureModuleStrongReference);
+            Map mmap = (Map)mmapf.get(moduleLoader);
+            mmap.put(frameworkModuleIdentifier, fm);
 
             /*
             ModuleLoader ModuleLoader = getBundleManager().getSystemModuleLoader();

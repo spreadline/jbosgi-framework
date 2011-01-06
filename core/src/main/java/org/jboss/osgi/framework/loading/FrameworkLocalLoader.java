@@ -50,7 +50,15 @@ public class FrameworkLocalLoader extends SystemLocalLoader
 
       for (String pkg : pkgs)
       {
-         paths.add(pkg.replace('.', '/'));
+         String path = pkg.replace('.', '/');
+
+         int idx = path.indexOf(';');
+         if (idx >= 0)
+         {
+            // Remove any attributes (like version information) from the path
+            path = path.substring(0, idx);
+         }
+         paths.add(path);
       }
       loaderPaths = Collections.unmodifiableSet(paths);
    }

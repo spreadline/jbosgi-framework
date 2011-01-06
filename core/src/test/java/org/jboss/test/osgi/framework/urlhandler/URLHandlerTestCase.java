@@ -21,6 +21,9 @@
 */
 package org.jboss.test.osgi.framework.urlhandler;
 
+import static org.junit.Assert.fail;
+
+import java.net.MalformedURLException;
 import java.net.URL;
 
 import org.jboss.osgi.testing.OSGiFrameworkTest;
@@ -41,7 +44,11 @@ public class URLHandlerTestCase extends OSGiFrameworkTest
    @Test
    public void testURLHandling2() throws Exception
    {
-      URL url = new URL("protocol2://blahdiblah");
-      System.out.println("Result: " + new String(Streams.suck(url.openStream())));
+      try {
+         new URL("protocol2://blahdiblah");
+         fail("The protocol is not registered so a URL containing this protocol should throw a MalformedURLException.");
+      } catch (MalformedURLException mue) {
+         // good
+      }
    }
 }
