@@ -57,8 +57,11 @@ public class URLHandlerPluginImpl extends AbstractPlugin implements URLHandlerPl
          {
             // TODO the OSGiModuleLoader is aware of our system module but the system module loader isn't
             // this causes issues in standalone mode because the ModularURLStreamHandlerFactory looks for the 
-            // module in the System Module Loader. 
+            // module in the System Module Loader.
+
             // Terrible hack to make the module system aware of the OSGi framework module
+            // another option could be to set the OSGiModuleLoader to be the system module loader by specifying
+            // its class name in the system.module.loader system property. 
             Field keyField = Module.class.getDeclaredField("myKey");
             keyField.setAccessible(true);
             Object fm = keyField.get(frameworkModule);
@@ -68,21 +71,6 @@ public class URLHandlerPluginImpl extends AbstractPlugin implements URLHandlerPl
             ModuleLoader moduleLoader = getBundleManager().getSystemModuleLoader();
             Map mmap = (Map)mmapf.get(moduleLoader);
             mmap.put(frameworkModuleIdentifier, fm);
-
-            /*
-            ModuleLoader ModuleLoader = getBundleManager().getSystemModuleLoader();
-            Module m2 = ModuleLoader.loadModule(frameworkModuleIdentifier);
-            System.out.println("### " + frameworkModule);
-            System.out.println("### " + m2);
-
-            // final ModuleIdentifier identifier = ModuleIdentifier.fromString("org.jboss.osgi.framework");
-            Module osgiModule = Module.getSystemModuleLoader().loadModule(frameworkModuleIdentifier);
-            final ServiceLoader<java.net.URLStreamHandlerFactory> loader = osgiModule.loadService(java.net.URLStreamHandlerFactory.class);
-            for (java.net.URLStreamHandlerFactory factory : loader)
-            {
-               System.out.println("### factory: " + factory);
-            }
-            */
          }
          catch (Exception e)
          {
@@ -91,6 +79,9 @@ public class URLHandlerPluginImpl extends AbstractPlugin implements URLHandlerPl
             e.printStackTrace();
          }
       }
+
+      URLStreamHandlerFactory.setSystemBundleContext(getBundleManager().getSystemContext());
+
       String val = System.getProperty("jboss.protocol.handler.modules");
       if (val == null)
       {
@@ -101,24 +92,5 @@ public class URLHandlerPluginImpl extends AbstractPlugin implements URLHandlerPl
          val += "|" + frameworkModuleIdentifier.getName();
       }
       System.setProperty("jboss.protocol.handler.modules", val);
-
-      /* 
-      // Debug
-      try
-      {
-         Field field = URL.class.getDeclaredField("factory");
-         field.setAccessible(true);
-         Object obj = field.get(null);
-         Method meth = obj.getClass().getDeclaredMethod("createURLStreamHandler", String.class);
-         meth.setAccessible(true);
-         Object h = meth.invoke(obj, "protocol1");
-         System.out.println("*** " + h);
-      }
-      catch (Exception e)
-      {
-         // TODO Auto-generated catch block
-         e.printStackTrace();
-      }
-      */
    }
 }

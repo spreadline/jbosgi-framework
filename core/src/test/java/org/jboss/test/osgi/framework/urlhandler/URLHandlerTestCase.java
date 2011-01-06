@@ -21,13 +21,25 @@
 */
 package org.jboss.test.osgi.framework.urlhandler;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.net.URLConnection;
+import java.util.Dictionary;
+import java.util.Hashtable;
 
 import org.jboss.osgi.testing.OSGiFrameworkTest;
 import org.junit.Test;
+import org.osgi.service.url.AbstractURLStreamHandlerService;
+import org.osgi.service.url.URLConstants;
+import org.osgi.service.url.URLStreamHandlerService;
 
 /**
  * @author <a href="david@redhat.com">David Bosschaert</a>
@@ -37,18 +49,100 @@ public class URLHandlerTestCase extends OSGiFrameworkTest
    @Test
    public void testURLHandling() throws Exception
    {
-      URL url = new URL("protocol1://blahdiblah");
-      System.out.println("Result: " + new String(Streams.suck(url.openStream())));
+      URLStreamHandlerService protocol1Svc = new TestURLStreamHandlerService("test_protocol1");
+      Dictionary<String, Object> props1 = new Hashtable<String, Object>();
+      props1.put(URLConstants.URL_HANDLER_PROTOCOL, "protocol1");
+      getSystemContext().registerService(URLStreamHandlerService.class.getName(), protocol1Svc, props1);
+      
+      URLStreamHandlerService protocol2Svc = new TestURLStreamHandlerService("test_protocol2");
+      Dictionary<String, Object> props2 = new Hashtable<String, Object>();
+      props2.put(URLConstants.URL_HANDLER_PROTOCOL, new String[] { "protocol2", "altprot2" });
+      getSystemContext().registerService(URLStreamHandlerService.class.getName(), protocol2Svc, props2);
+
+      URL url = new URL("protocol1://blah");
+      assertEquals("test_protocol1blah", new String(suckStream(url.openStream())));
+
+      URL url2 = new URL("protocol2://foo");
+      assertEquals("test_protocol2foo", new String(suckStream(url2.openStream())));
+
+      URL url3 = new URL("altprot2://bar");
+      assertEquals("test_protocol2bar", new String(suckStream(url3.openStream())));
+
+      try
+      {
+         new URL("protocol3://blahdiblah");
+         fail("protocol3 is not registered so a URL containing this protocol should throw a MalformedURLException.");
+      }
+      catch (MalformedURLException mue)
+      {
+         // good
+      }
    }
 
-   @Test
-   public void testURLHandling2() throws Exception
+
+   public static void pumpStream(InputStream is, OutputStream os) throws IOException
    {
-      try {
-         new URL("protocol2://blahdiblah");
-         fail("The protocol is not registered so a URL containing this protocol should throw a MalformedURLException.");
-      } catch (MalformedURLException mue) {
-         // good
+      byte[] bytes = new byte[8192];
+
+      int length = 0;
+      int offset = 0;
+
+      while ((length = is.read(bytes, offset, bytes.length - offset)) != -1)
+      {
+         offset += length;
+
+         if (offset == bytes.length)
+         {
+            os.write(bytes, 0, bytes.length);
+            offset = 0;
+         }
+      }
+      if (offset != 0)
+      {
+         os.write(bytes, 0, offset);
+      }
+   }
+
+   public static byte[] suckStream(InputStream is) throws IOException
+   {
+      ByteArrayOutputStream baos = new ByteArrayOutputStream();
+      try
+      {
+         pumpStream(is, baos);
+         return baos.toByteArray();
+      }
+      finally
+      {
+         is.close();
+      }
+   }
+
+   private static class TestURLStreamHandlerService extends AbstractURLStreamHandlerService
+   {
+      private final String data;
+
+      public TestURLStreamHandlerService(String data)
+      {
+         this.data = data;
+      }
+
+      @Override
+      public URLConnection openConnection(final URL u) throws IOException
+      {
+         return new URLConnection(u)
+         {
+            @Override
+            public void connect() throws IOException
+            {
+            }
+
+            @Override
+            public InputStream getInputStream() throws IOException
+            {
+               String content = data + u.getHost();
+               return new ByteArrayInputStream(content.getBytes());
+            }
+         };
       }
    }
 }

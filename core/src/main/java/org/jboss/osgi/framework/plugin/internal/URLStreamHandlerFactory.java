@@ -21,57 +21,125 @@
  */
 package org.jboss.osgi.framework.plugin.internal;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URL;
 import java.net.URLConnection;
 import java.net.URLStreamHandler;
+import java.util.Arrays;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+import org.jboss.logging.Logger;
+import org.osgi.framework.BundleContext;
+import org.osgi.framework.ServiceReference;
+import org.osgi.service.url.URLConstants;
+import org.osgi.service.url.URLStreamHandlerService;
+import org.osgi.util.tracker.ServiceTracker;
 
 /**
  * @author <a href="david@redhat.com">David Bosschaert</a>
  */
 public class URLStreamHandlerFactory implements java.net.URLStreamHandlerFactory
 {
-   @Override
-   public URLStreamHandler createURLStreamHandler(String protocol)
+   private static BundleContext systemBundleContext;
+
+   final Logger log = Logger.getLogger(URLStreamHandlerFactory.class);
+   private final ServiceTracker tracker;
+   private Map<String, URLStreamHandlerService> handlers = new ConcurrentHashMap<String, URLStreamHandlerService>();
+
+   static void setSystemBundleContext(BundleContext bc)
    {
-      System.out.println("******* Request for: " + protocol);
-      if ("protocol1".equals(protocol))
+      systemBundleContext = bc;
+   }
+
+   public URLStreamHandlerFactory()
+   {
+      if (systemBundleContext == null)
+         throw new IllegalStateException("System Context not initialized");
+
+      tracker = new ServiceTracker(systemBundleContext, URLStreamHandlerService.class.getName(), null)
       {
-         return new Protocol1Handler();
-      }
+
+         @Override
+         public Object addingService(ServiceReference reference)
+         {
+            Object svc = super.addingService(reference);
+            String[] protocols = parseProtocol(reference.getProperty(URLConstants.URL_HANDLER_PROTOCOL));
+            if (protocols != null && svc instanceof URLStreamHandlerService)
+            {
+               for (String protocol : protocols)
+                  handlers.put(protocol, (URLStreamHandlerService)svc);
+            }
+            else
+            {
+               log.error("A non-compliant instance of " + URLStreamHandlerService.class.getName()
+                     + " has been registered for protocol: " + Arrays.toString(protocols) + " - " + svc);
+            }
+            return svc;
+         }
+
+         @Override
+         public void modifiedService(ServiceReference reference, Object service)
+         {
+            // TODO Auto-generated method stub
+            // David: vaguely remember that the spec says something about ignoring this case need to check
+            super.modifiedService(reference, service);
+         }
+
+         @Override
+         public void removedService(ServiceReference reference, Object service)
+         {
+            super.removedService(reference, service);
+
+            for (Iterator<URLStreamHandlerService> it = handlers.values().iterator(); it.hasNext();)
+            {
+               URLStreamHandlerService svc = it.next();
+               if (service.equals(svc))
+               {
+                  it.remove();
+                  break;
+               }
+            }
+         }
+      };
+      tracker.open();
+   }
+
+   @Override
+   protected void finalize() throws Throwable
+   {
+      tracker.close();
+   }
+
+   protected String[] parseProtocol(Object prop)
+   {
+      if (prop == null)
+         return null;
+
+      if (prop instanceof String)
+         return new String[] { (String)prop };
+
+      if (prop instanceof String[])
+         return (String[])prop;
+
       return null;
    }
 
-   private static final class Protocol1Handler extends URLStreamHandler
+   @Override
+   public URLStreamHandler createURLStreamHandler(String protocol)
    {
-
-      @Override
-      protected URLConnection openConnection(URL u) throws IOException
+      final URLStreamHandlerService handlerService = handlers.get(protocol);
+      if (handlerService == null) 
+         return null;
+      
+      return new URLStreamHandler()
       {
-         return new Protocol1URLConnection(u);
-      }
-
-   }
-
-   private static final class Protocol1URLConnection extends URLConnection
-   {
-
-      public Protocol1URLConnection(URL u)
-      {
-         super(u);
-      }
-
-      @Override
-      public void connect() throws IOException
-      {
-      }
-
-      @Override
-      public InputStream getInputStream() throws IOException
-      {
-         return new ByteArrayInputStream("XYZ".getBytes());
-      }
+         @Override
+         protected URLConnection openConnection(URL u) throws IOException
+         {
+            return handlerService.openConnection(u);
+         }
+      };
    }
 }
