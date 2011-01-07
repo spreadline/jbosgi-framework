@@ -25,6 +25,7 @@ import java.lang.reflect.Field;
 import java.net.URLConnection;
 import java.util.Map;
 
+import org.jboss.logging.Logger;
 import org.jboss.modules.Module;
 import org.jboss.modules.ModuleIdentifier;
 import org.jboss.modules.ModuleLoader;
@@ -39,6 +40,8 @@ import org.jboss.osgi.framework.plugin.URLHandlerPlugin;
  */
 public class URLHandlerPluginImpl extends AbstractPlugin implements URLHandlerPlugin
 {
+   private final Logger log = Logger.getLogger(URLHandlerPluginImpl.class);
+
    public URLHandlerPluginImpl(BundleManager bundleManager)
    {
       super(bundleManager);
@@ -57,12 +60,12 @@ public class URLHandlerPluginImpl extends AbstractPlugin implements URLHandlerPl
          try
          {
             // TODO the OSGiModuleLoader is aware of our system module but the system module loader isn't
-            // this causes issues in standalone mode because the ModularURLStreamHandlerFactory looks for the 
+            // this causes issues in standalone mode because the ModularURLStreamHandlerFactory looks for the
             // module in the System Module Loader.
 
             // Terrible hack to make the module system aware of the OSGi framework module
             // another option could be to set the OSGiModuleLoader to be the system module loader by specifying
-            // its class name in the system.module.loader system property. 
+            // its class name in the system.module.loader system property.
             Field keyField = Module.class.getDeclaredField("myKey");
             keyField.setAccessible(true);
             Object fm = keyField.get(frameworkModule);
@@ -80,9 +83,18 @@ public class URLHandlerPluginImpl extends AbstractPlugin implements URLHandlerPl
             e.printStackTrace();
          }
       }
-
       URLHandlerFactory.setSystemBundleContext(getBundleManager().getSystemContext());
-      URLConnection.setContentHandlerFactory(new URLContentHandlerFactory(getBundleManager().getSystemContext()));
+
+      try
+      {
+         // TODO I would expect JBoss Modules to set this one too.
+         URLConnection.setContentHandlerFactory(new URLContentHandlerFactoryDelegate());
+      }
+      catch (Error e)
+      {
+         log.warn("Unable to set the ContentHandlerFactory on the URLConnection.", e);
+      }
+      URLContentHandlerFactoryDelegate.setDelegate(new URLContentHandlerFactory(getBundleManager().getSystemContext()));
 
       String val = System.getProperty("jboss.protocol.handler.modules");
       if (val == null)
