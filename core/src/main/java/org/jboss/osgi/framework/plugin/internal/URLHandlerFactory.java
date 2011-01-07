@@ -22,6 +22,8 @@
 package org.jboss.osgi.framework.plugin.internal;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.net.InetAddress;
 import java.net.Proxy;
 import java.net.URL;
@@ -47,11 +49,11 @@ import org.osgi.util.tracker.ServiceTracker;
 /**
  * @author <a href="david@redhat.com">David Bosschaert</a>
  */
-public class URLStreamHandlerFactory implements java.net.URLStreamHandlerFactory
+public class URLHandlerFactory implements java.net.URLStreamHandlerFactory
 {
    private static BundleContext systemBundleContext;
 
-   private final Logger log = Logger.getLogger(URLStreamHandlerFactory.class);
+   private final Logger log = Logger.getLogger(URLHandlerFactory.class);
    private final ServiceTracker tracker;
    private ConcurrentMap<String, List<ServiceReference>> handlers = new ConcurrentHashMap<String, List<ServiceReference>>();
 
@@ -85,7 +87,7 @@ public class URLStreamHandlerFactory implements java.net.URLStreamHandlerFactory
       systemBundleContext = bc;
    }
 
-   public URLStreamHandlerFactory()
+   public URLHandlerFactory()
    {
       if (systemBundleContext == null)
          throw new IllegalStateException("System Context not initialized");
@@ -214,9 +216,24 @@ public class URLStreamHandlerFactory implements java.net.URLStreamHandlerFactory
       @Override
       protected URLConnection openConnection(URL u, Proxy p) throws IOException
       {
-         // TODO via reflection:
-         // return getHandlerService().openConnection(u, p);
-         return null;
+         URLStreamHandlerService handler = getHandlerService();
+         try
+         {
+            Method method = handler.getClass().getDeclaredMethod("openConnection", URL.class, Proxy.class);
+            return (URLConnection)method.invoke(handler, u, p);
+         }
+         catch (NoSuchMethodException e)
+         {
+            throw new IOException("openConnection(URL,Proxy) not found on " + handler, e);
+         }
+         catch (IllegalAccessException e)
+         {
+            throw new IOException("openConnection(URL,Proxy) not accessible on " + handler, e);
+         }
+         catch (InvocationTargetException e)
+         {
+            throw new IOException("Problem invoking openConnection(URL,Proxy) on " + handler, e);
+         }
       }
 
       @Override

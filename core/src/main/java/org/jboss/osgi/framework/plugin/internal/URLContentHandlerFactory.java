@@ -43,7 +43,7 @@ import org.osgi.util.tracker.ServiceTracker;
  */
 public class URLContentHandlerFactory implements ContentHandlerFactory
 {
-   private final Logger log = Logger.getLogger(URLStreamHandlerFactory.class);
+   private final Logger log = Logger.getLogger(URLHandlerFactory.class);
    private ServiceTracker tracker;
    private ConcurrentMap<String, List<ServiceReference>> handlers = new ConcurrentHashMap<String, List<ServiceReference>>();
 
@@ -55,7 +55,7 @@ public class URLContentHandlerFactory implements ContentHandlerFactory
          public Object addingService(ServiceReference reference)
          {
             Object svc = super.addingService(reference);
-            String[] mimeTypes = URLStreamHandlerFactory.parseServiceProperty(reference.getProperty(URLConstants.URL_CONTENT_MIMETYPE));
+            String[] mimeTypes = URLHandlerFactory.parseServiceProperty(reference.getProperty(URLConstants.URL_CONTENT_MIMETYPE));
             if (mimeTypes != null && svc instanceof ContentHandler)
             {
                for (String mimeType : mimeTypes)

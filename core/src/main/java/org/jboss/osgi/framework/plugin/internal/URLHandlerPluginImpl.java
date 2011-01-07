@@ -81,7 +81,7 @@ public class URLHandlerPluginImpl extends AbstractPlugin implements URLHandlerPl
          }
       }
 
-      URLStreamHandlerFactory.setSystemBundleContext(getBundleManager().getSystemContext());
+      URLHandlerFactory.setSystemBundleContext(getBundleManager().getSystemContext());
       URLConnection.setContentHandlerFactory(new URLContentHandlerFactory(getBundleManager().getSystemContext()));
 
       String val = System.getProperty("jboss.protocol.handler.modules");

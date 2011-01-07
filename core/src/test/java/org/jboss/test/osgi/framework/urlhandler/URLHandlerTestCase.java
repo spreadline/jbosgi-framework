@@ -22,6 +22,10 @@
 package org.jboss.test.osgi.framework.urlhandler;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.ByteArrayInputStream;
@@ -29,26 +33,74 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.reflect.Method;
 import java.net.ContentHandler;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.MalformedURLException;
+import java.net.Proxy;
 import java.net.URL;
 import java.net.URLConnection;
+import java.net.URLStreamHandler;
+import java.net.URLStreamHandlerFactory;
+import java.net.UnknownHostException;
 import java.util.Dictionary;
 import java.util.Hashtable;
+import java.util.ServiceLoader;
 
 import org.jboss.osgi.framework.Constants;
+import org.jboss.osgi.framework.plugin.internal.URLHandlerFactory;
 import org.jboss.osgi.testing.OSGiFrameworkTest;
+import org.junit.Assert;
 import org.junit.Test;
 import org.osgi.framework.ServiceRegistration;
 import org.osgi.service.url.AbstractURLStreamHandlerService;
 import org.osgi.service.url.URLConstants;
 import org.osgi.service.url.URLStreamHandlerService;
+import org.osgi.service.url.URLStreamHandlerSetter;
 
 /**
  * @author <a href="david@redhat.com">David Bosschaert</a>
  */
 public class URLHandlerTestCase extends OSGiFrameworkTest
 {
+   private static void pumpStream(InputStream is, OutputStream os) throws IOException
+   {
+      byte[] bytes = new byte[8192];
+
+      int length = 0;
+      int offset = 0;
+
+      while ((length = is.read(bytes, offset, bytes.length - offset)) != -1)
+      {
+         offset += length;
+
+         if (offset == bytes.length)
+         {
+            os.write(bytes, 0, bytes.length);
+            offset = 0;
+         }
+      }
+      if (offset != 0)
+      {
+         os.write(bytes, 0, offset);
+      }
+   }
+
+   private static byte[] suckStream(InputStream is) throws IOException
+   {
+      ByteArrayOutputStream baos = new ByteArrayOutputStream();
+      try
+      {
+         pumpStream(is, baos);
+         return baos.toByteArray();
+      }
+      finally
+      {
+         is.close();
+      }
+   }
+
    @Test
    public void testURLHandling() throws Exception
    {
@@ -60,7 +112,7 @@ public class URLHandlerTestCase extends OSGiFrameworkTest
       URLStreamHandlerService protocol2Svc = new TestURLStreamHandlerService("test_protocol2");
       Dictionary<String, Object> props2 = new Hashtable<String, Object>();
       props2.put(URLConstants.URL_HANDLER_PROTOCOL, new String[] { "protocol2", "altprot2" });
-      getSystemContext().registerService(URLStreamHandlerService.class.getName(), protocol2Svc, props2);
+      ServiceRegistration reg2 = getSystemContext().registerService(URLStreamHandlerService.class.getName(), protocol2Svc, props2);
 
       URL url = new URL("protocol1://blah");
       assertEquals("test_protocol1blah", new String(suckStream(url.openStream())));
@@ -91,6 +143,8 @@ public class URLHandlerTestCase extends OSGiFrameworkTest
       {
          // good
       }
+
+      reg2.unregister();
    }
 
    @Test
@@ -100,7 +154,7 @@ public class URLHandlerTestCase extends OSGiFrameworkTest
       Dictionary<String, Object> props1 = new Hashtable<String, Object>();
       props1.put(URLConstants.URL_HANDLER_PROTOCOL, "p1");
       props1.put(Constants.SERVICE_RANKING, 10);
-      getSystemContext().registerService(URLStreamHandlerService.class.getName(), svc1, props1);
+      ServiceRegistration reg1 = getSystemContext().registerService(URLStreamHandlerService.class.getName(), svc1, props1);
 
       URLStreamHandlerService svc2 = new TestURLStreamHandlerService("tp2");
       Dictionary<String, Object> props2 = new Hashtable<String, Object>();
@@ -129,7 +183,7 @@ public class URLHandlerTestCase extends OSGiFrameworkTest
       Dictionary<String, Object> props4 = new Hashtable<String, Object>();
       props4.put(URLConstants.URL_HANDLER_PROTOCOL, "p1");
       props4.put(Constants.SERVICE_RANKING, 7);
-      getSystemContext().registerService(URLStreamHandlerService.class.getName(), svc4, props4);
+      ServiceRegistration reg4 = getSystemContext().registerService(URLStreamHandlerService.class.getName(), svc4, props4);
 
       URL url4 = new URL("p1://testing");
       assertEquals("tp1testing", new String(suckStream(url4.openStream())));
@@ -138,10 +192,14 @@ public class URLHandlerTestCase extends OSGiFrameworkTest
       Dictionary<String, Object> props5 = new Hashtable<String, Object>();
       props5.put(URLConstants.URL_HANDLER_PROTOCOL, "p1");
       props5.put(Constants.SERVICE_RANKING, 11);
-      getSystemContext().registerService(URLStreamHandlerService.class.getName(), svc5, props5);
+      ServiceRegistration reg5 = getSystemContext().registerService(URLStreamHandlerService.class.getName(), svc5, props5);
 
       URL url5 = new URL("p1://testing");
       assertEquals("tp5testing", new String(suckStream(url5.openStream())));
+
+      reg1.unregister();
+      reg4.unregister();
+      reg5.unregister();
    }
 
    @Test
@@ -151,52 +209,125 @@ public class URLHandlerTestCase extends OSGiFrameworkTest
       Dictionary<String, Object> props1 = new Hashtable<String, Object>();
       props1.put(URLConstants.URL_HANDLER_PROTOCOL, "p1");
       props1.put(Constants.SERVICE_RANKING, 10);
-      getSystemContext().registerService(URLStreamHandlerService.class.getName(), svc1, props1);
+      ServiceRegistration reg1 = getSystemContext().registerService(URLStreamHandlerService.class.getName(), svc1, props1);
 
       ContentHandler ch1 = new TestContentHandler("test_content");
       Dictionary<String, Object> chprops1 = new Hashtable<String, Object>();
       chprops1.put(URLConstants.URL_CONTENT_MIMETYPE, new String[] { "foo/bar" });
-      getSystemContext().registerService(ContentHandler.class.getName(), ch1, chprops1);
+      ServiceRegistration reg2 = getSystemContext().registerService(ContentHandler.class.getName(), ch1, chprops1);
 
       URL url = new URL("p1://test");
       Object ob = url.getContent();
       assertEquals("Get content", "test_content", ob);
+
+      reg2.unregister();
+      reg1.unregister();
    }
 
-   public static void pumpStream(InputStream is, OutputStream os) throws IOException
+   @Test
+   public void testDelegateMethods() throws Exception
    {
-      byte[] bytes = new byte[8192];
+      URLStreamHandlerService svc = new DelegationTestURLStreamHandlerService();
+      Dictionary<String, Object> props = new Hashtable<String, Object>();
+      props.put(URLConstants.URL_HANDLER_PROTOCOL, "jbossosgitest");
+      ServiceRegistration reg = getSystemContext().registerService(URLStreamHandlerService.class.getName(), svc, props);
 
-      int length = 0;
-      int offset = 0;
+      URLStreamHandlerFactory factory = new URLHandlerFactory();
+      URLStreamHandler handler = factory.createURLStreamHandler("jbossosgitest");
 
-      while ((length = is.read(bytes, offset, bytes.length - offset)) != -1)
+      // Invoke methods through reflection to make sure the proxying works ok.
+      Class<?> hcls = handler.getClass();
+      Method defaultPortMethod = hcls.getDeclaredMethod("getDefaultPort");
+      defaultPortMethod.setAccessible(true);
+      assertEquals(979, defaultPortMethod.invoke(handler));
+
+      Method equalsMethod = hcls.getDeclaredMethod("equals", URL.class, URL.class);
+      equalsMethod.setAccessible(true);
+      URL u1 = new URL("file://");
+      URL u2 = new URL("http://127.0.0.1");
+      assertTrue((Boolean)equalsMethod.invoke(handler, u1, u1));
+      assertFalse("This special testing implementation returns false for every URL other than file:// even if they are the same",
+            (Boolean)equalsMethod.invoke(handler, u2, u2));
+      assertFalse((Boolean)equalsMethod.invoke(handler, u1, u2));
+
+      Method hashCodeMethod = hcls.getDeclaredMethod("hashCode", URL.class);
+      hashCodeMethod.setAccessible(true);
+      assertEquals(327, hashCodeMethod.invoke(handler, u1));
+
+      Method sameFileMethod = hcls.getDeclaredMethod("sameFile", URL.class, URL.class);
+      sameFileMethod.setAccessible(true);
+      assertTrue((Boolean)sameFileMethod.invoke(handler, u2, u2));
+      assertFalse("This special testing implementation returns false for every URL other than http://127.0.0.1 even if they are the same",
+            (Boolean)sameFileMethod.invoke(handler, u1, u1));
+      assertFalse((Boolean)sameFileMethod.invoke(handler, u1, u2));
+
+      Method hostAddressMethod = hcls.getDeclaredMethod("getHostAddress", URL.class);
+      hostAddressMethod.setAccessible(true);
+      assertEquals(InetAddress.getLocalHost(), hostAddressMethod.invoke(handler, u1));
+      assertNull(hostAddressMethod.invoke(handler, u2));
+
+      Method hostsEqualMethod = hcls.getDeclaredMethod("hostsEqual", URL.class, URL.class);
+      hostsEqualMethod.setAccessible(true);
+      URL u3 = new URL("http://0.0.0.0");
+      assertTrue((Boolean)hostsEqualMethod.invoke(handler, u3, u3));
+      assertFalse("This special testing implementation returns false for every URL other than http://0.0.0.0 even if they are the same",
+            (Boolean)hostsEqualMethod.invoke(handler, u3, u2));
+      assertFalse((Boolean)hostsEqualMethod.invoke(handler, u1, u1));
+
+      Method toExternalFormMethod = hcls.getDeclaredMethod("toExternalForm", URL.class);
+      toExternalFormMethod.setAccessible(true);
+      assertEquals("elif", toExternalFormMethod.invoke(handler, u1));
+
+      Method openConnection = hcls.getDeclaredMethod("openConnection", URL.class);
+      openConnection.setAccessible(true);
+      TestURLConnection tc1 = (TestURLConnection)openConnection.invoke(handler, u1);
+      assertEquals(u1, tc1.getURL());
+      assertNull(tc1.getProxy());
+
+      Method openConnectionProxy = hcls.getDeclaredMethod("openConnection", URL.class, Proxy.class);
+      openConnectionProxy.setAccessible(true);
+      Proxy p = new Proxy(null, new InetSocketAddress(32767));
+      TestURLConnection tc2 = (TestURLConnection)openConnectionProxy.invoke(handler, u2, p);
+      assertEquals(u2, tc2.getURL());
+      assertSame(p, tc2.getProxy());
+
+      reg.unregister();
+   }
+
+   @Test
+   public void testServiceLoader() throws Exception
+   {
+      ServiceLoader<URLStreamHandlerFactory> sl = ServiceLoader.load(URLStreamHandlerFactory.class, getSystemContext().getClass().getClassLoader());
+      URLStreamHandlerFactory factory = null;
+      for (URLStreamHandlerFactory f : sl)
       {
-         offset += length;
-
-         if (offset == bytes.length)
+         if (f instanceof URLStreamHandlerFactory)
          {
-            os.write(bytes, 0, bytes.length);
-            offset = 0;
+            factory = f;
+            break;
          }
       }
-      if (offset != 0)
-      {
-         os.write(bytes, 0, offset);
-      }
+      Assert.assertNotNull("ServiceLoader should find our factory", factory);
    }
 
-   public static byte[] suckStream(InputStream is) throws IOException
+   private static class TestURLConnection extends URLConnection
    {
-      ByteArrayOutputStream baos = new ByteArrayOutputStream();
-      try
+      private final Proxy proxy;
+
+      protected TestURLConnection(URL url, Proxy p)
       {
-         pumpStream(is, baos);
-         return baos.toByteArray();
+         super(url);
+         proxy = p;
       }
-      finally
+
+      public Proxy getProxy()
       {
-         is.close();
+         return proxy;
+      }
+
+      @Override
+      public void connect() throws IOException
+      {
       }
    }
 
@@ -255,6 +386,107 @@ public class URLHandlerTestCase extends OSGiFrameworkTest
       public Object getContent(URLConnection urlc) throws IOException
       {
          return data;
+      }
+   }
+
+   // Testing implementation with funny behaviour which can be tested for
+   public static class DelegationTestURLStreamHandlerService implements URLStreamHandlerService
+   {
+
+      @Override
+      public URLConnection openConnection(URL u) throws IOException
+      {
+         return new TestURLConnection(u, null);
+      }
+
+      public URLConnection openConnection(URL u, Proxy p) throws IOException
+      {
+         return new TestURLConnection(u, p);
+      }
+
+      @Override
+      public void parseURL(URLStreamHandlerSetter realHandler, URL u, String spec, int start, int limit)
+      {
+      }
+
+      @Override
+      public String toExternalForm(URL u)
+      {
+         return new StringBuffer(u.getProtocol()).reverse().toString();
+      }
+
+      @Override
+      public boolean equals(URL u1, URL u2)
+      {
+         URL u = null;
+         try
+         {
+            u = new URL("file://");
+         }
+         catch (MalformedURLException e)
+         {
+            e.printStackTrace();
+         }
+         return u1.equals(u2) && u1.equals(u);
+      }
+
+      @Override
+      public int getDefaultPort()
+      {
+         return 979;
+      }
+
+      @Override
+      public InetAddress getHostAddress(URL u)
+      {
+         if (u.toString().startsWith("file:"))
+         {
+            try
+            {
+               return InetAddress.getLocalHost();
+            }
+            catch (UnknownHostException e)
+            {
+               e.printStackTrace();
+            }
+         }
+         return null;
+      }
+
+      @Override
+      public int hashCode(URL u)
+      {
+         return 327;
+      }
+
+      @Override
+      public boolean hostsEqual(URL u1, URL u2)
+      {
+         URL u = null;
+         try
+         {
+            u = new URL("http://0.0.0.0");
+         }
+         catch (MalformedURLException e)
+         {
+            e.printStackTrace();
+         }
+         return u1.equals(u2) && u1.equals(u);
+      }
+
+      @Override
+      public boolean sameFile(URL u1, URL u2)
+      {
+         URL u = null;
+         try
+         {
+            u = new URL("http://127.0.0.1");
+         }
+         catch (MalformedURLException e)
+         {
+            e.printStackTrace();
+         }
+         return u1.equals(u2) && u1.equals(u);
       }
    }
 }
