@@ -121,9 +121,8 @@ public class URLStreamHandlerFactory implements java.net.URLStreamHandlerFactory
          @Override
          public void modifiedService(ServiceReference reference, Object service)
          {
-            // TODO Auto-generated method stub
-            // David: vaguely remember that the spec says something about ignoring this case need to check
-            super.modifiedService(reference, service);
+            removedService(reference, service);
+            addingService(reference);
          }
 
          @Override

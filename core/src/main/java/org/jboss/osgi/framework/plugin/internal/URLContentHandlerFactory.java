@@ -80,9 +80,8 @@ public class URLContentHandlerFactory implements ContentHandlerFactory
          @Override
          public void modifiedService(ServiceReference reference, Object service)
          {
-            // TODO Auto-generated method stub
-            // David: vaguely remember that the spec says something about ignoring this case need to check
-            super.modifiedService(reference, service);
+            removedService(reference, service);
+            addingService(reference);
          }
 
          @Override
@@ -118,7 +117,6 @@ public class URLContentHandlerFactory implements ContentHandlerFactory
    @Override
    public ContentHandler createContentHandler(String mimetype)
    {
-      // TODO is this good enough? Or do we need a proxy like in the URLStreamHandelrFactory.
       List<ServiceReference> refList = handlers.get(mimetype);
       if (refList == null)
          return null;
