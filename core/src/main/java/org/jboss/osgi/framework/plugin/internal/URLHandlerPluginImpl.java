@@ -22,6 +22,7 @@
 package org.jboss.osgi.framework.plugin.internal;
 
 import java.lang.reflect.Field;
+import java.net.URLConnection;
 import java.util.Map;
 
 import org.jboss.modules.Module;
@@ -81,6 +82,7 @@ public class URLHandlerPluginImpl extends AbstractPlugin implements URLHandlerPl
       }
 
       URLStreamHandlerFactory.setSystemBundleContext(getBundleManager().getSystemContext());
+      URLConnection.setContentHandlerFactory(new URLContentHandlerFactory(getBundleManager().getSystemContext()));
 
       String val = System.getProperty("jboss.protocol.handler.modules");
       if (val == null)

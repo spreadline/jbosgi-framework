@@ -51,10 +51,35 @@ public class URLStreamHandlerFactory implements java.net.URLStreamHandlerFactory
 {
    private static BundleContext systemBundleContext;
 
-   final Logger log = Logger.getLogger(URLStreamHandlerFactory.class);
+   private final Logger log = Logger.getLogger(URLStreamHandlerFactory.class);
    private final ServiceTracker tracker;
    private ConcurrentMap<String, List<ServiceReference>> handlers = new ConcurrentHashMap<String, List<ServiceReference>>();
 
+   /**
+    * Parses a service registration property with a value which can be of type String
+    * or String [].
+    * @param prop The property value.
+    * @return All the values found in a String [] or null of the property doesn't comply.
+    */
+   static String[] parseServiceProperty(Object prop)
+   {
+      if (prop == null)
+         return null;
+
+      if (prop instanceof String)
+         return new String[] { (String)prop };
+
+      if (prop instanceof String[])
+         return (String[])prop;
+
+      return null;
+   }
+
+   /**
+    * Makes the System BundleContext available to the handler.
+    * Since the instance of this class is created by java.lang.ServiceLoader there is no
+    * other way of doing this...
+    */
    static void setSystemBundleContext(BundleContext bc)
    {
       systemBundleContext = bc;
@@ -67,12 +92,11 @@ public class URLStreamHandlerFactory implements java.net.URLStreamHandlerFactory
 
       tracker = new ServiceTracker(systemBundleContext, URLStreamHandlerService.class.getName(), null)
       {
-
          @Override
          public Object addingService(ServiceReference reference)
          {
             Object svc = super.addingService(reference);
-            String[] protocols = parseProtocol(reference.getProperty(URLConstants.URL_HANDLER_PROTOCOL));
+            String[] protocols = parseServiceProperty(reference.getProperty(URLConstants.URL_HANDLER_PROTOCOL));
             if (protocols != null && svc instanceof URLStreamHandlerService)
             {
                for (String protocol : protocols)
@@ -89,7 +113,7 @@ public class URLStreamHandlerFactory implements java.net.URLStreamHandlerFactory
             else
             {
                log.error("A non-compliant instance of " + URLStreamHandlerService.class.getName()
-                     + " has been registered for protocol: " + Arrays.toString(protocols) + " - " + svc);
+                     + " has been registered for protocols: " + Arrays.toString(protocols) + " - " + svc);
             }
             return svc;
          }
@@ -132,27 +156,13 @@ public class URLStreamHandlerFactory implements java.net.URLStreamHandlerFactory
       tracker.close();
    }
 
-   protected String[] parseProtocol(Object prop)
-   {
-      if (prop == null)
-         return null;
-
-      if (prop instanceof String)
-         return new String[] { (String)prop };
-
-      if (prop instanceof String[])
-         return (String[])prop;
-
-      return null;
-   }
-
    @Override
    public URLStreamHandler createURLStreamHandler(String protocol)
    {
       List<ServiceReference> refList = handlers.get(protocol);
       if (refList == null)
          return null;
-      
+
       return new URLStreamHandlerProxy(protocol, refList);
    }
 
@@ -168,7 +178,7 @@ public class URLStreamHandlerFactory implements java.net.URLStreamHandlerFactory
          this.protocol = protocol;
          this.serviceReferences = refList;
       }
-      
+
       @Override
       public void setURL(URL u, String protocol, String host, int port, String authority, String userInfo, String path, String query, String ref)
       {
@@ -205,7 +215,7 @@ public class URLStreamHandlerFactory implements java.net.URLStreamHandlerFactory
       @Override
       protected URLConnection openConnection(URL u, Proxy p) throws IOException
       {
-         // TODO via reflection: 
+         // TODO via reflection:
          // return getHandlerService().openConnection(u, p);
          return null;
       }

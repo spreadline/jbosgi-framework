@@ -29,6 +29,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.ContentHandler;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLConnection;
@@ -55,7 +56,7 @@ public class URLHandlerTestCase extends OSGiFrameworkTest
       Dictionary<String, Object> props1 = new Hashtable<String, Object>();
       props1.put(URLConstants.URL_HANDLER_PROTOCOL, "protocol1");
       ServiceRegistration reg1 = getSystemContext().registerService(URLStreamHandlerService.class.getName(), protocol1Svc, props1);
-      
+
       URLStreamHandlerService protocol2Svc = new TestURLStreamHandlerService("test_protocol2");
       Dictionary<String, Object> props2 = new Hashtable<String, Object>();
       props2.put(URLConstants.URL_HANDLER_PROTOCOL, new String[] { "protocol2", "altprot2" });
@@ -143,6 +144,25 @@ public class URLHandlerTestCase extends OSGiFrameworkTest
       assertEquals("tp5testing", new String(suckStream(url5.openStream())));
    }
 
+   @Test
+   public void testContentHandler() throws Exception
+   {
+      URLStreamHandlerService svc1 = new TestURLStreamHandlerService("tp1", "foo/bar");
+      Dictionary<String, Object> props1 = new Hashtable<String, Object>();
+      props1.put(URLConstants.URL_HANDLER_PROTOCOL, "p1");
+      props1.put(Constants.SERVICE_RANKING, 10);
+      getSystemContext().registerService(URLStreamHandlerService.class.getName(), svc1, props1);
+
+      ContentHandler ch1 = new TestContentHandler("test_content");
+      Dictionary<String, Object> chprops1 = new Hashtable<String, Object>();
+      chprops1.put(URLConstants.URL_CONTENT_MIMETYPE, new String[] { "foo/bar" });
+      getSystemContext().registerService(ContentHandler.class.getName(), ch1, chprops1);
+
+      URL url = new URL("p1://test");
+      Object ob = url.getContent();
+      assertEquals("Get content", "test_content", ob);
+   }
+
    public static void pumpStream(InputStream is, OutputStream os) throws IOException
    {
       byte[] bytes = new byte[8192];
@@ -183,10 +203,17 @@ public class URLHandlerTestCase extends OSGiFrameworkTest
    private static class TestURLStreamHandlerService extends AbstractURLStreamHandlerService
    {
       private final String data;
+      private final String contentType;
 
       public TestURLStreamHandlerService(String data)
       {
+         this(data, null);
+      }
+
+      public TestURLStreamHandlerService(String data, String contentType)
+      {
          this.data = data;
+         this.contentType = contentType;
       }
 
       @Override
@@ -200,12 +227,34 @@ public class URLHandlerTestCase extends OSGiFrameworkTest
             }
 
             @Override
+            public String getContentType()
+            {
+               return contentType;
+            }
+
+            @Override
             public InputStream getInputStream() throws IOException
             {
                String content = data + u.getHost();
                return new ByteArrayInputStream(content.getBytes());
             }
          };
+      }
+   }
+
+   public class TestContentHandler extends ContentHandler
+   {
+      private final String data;
+
+      public TestContentHandler(String data)
+      {
+         this.data = data;
+      }
+
+      @Override
+      public Object getContent(URLConnection urlc) throws IOException
+      {
+         return data;
       }
    }
 }
