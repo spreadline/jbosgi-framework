@@ -29,9 +29,6 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.File;
 import java.io.InputStream;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
-import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -49,7 +46,7 @@ import org.osgi.service.startlevel.StartLevel;
 
 /**
  * Test framework bootstrap options.
- * 
+ *
  * @author thomas.diesler@jboss.com
  * @author <a href="david@redhat.com">David Bosschaert</a>
  * @since 29-Apr-2010
@@ -61,27 +58,27 @@ public class FrameworkLaunchTestCase extends OSGiFrameworkTest
    {
       // prevent framework creation
    }
-   
+
    @Test
    public void testFrameworkStartStop() throws Exception
    {
       Map<String,String> props = new HashMap<String, String>();
       props.put("org.osgi.framework.storage", "target/osgi-store");
       props.put("org.osgi.framework.storage.clean", "onFirstInit");
-      
+
       FrameworkFactory factory = ServiceLoader.loadService(FrameworkFactory.class);
       Framework framework = factory.newFramework(props);
-      
+
       assertNotNull("Framework not null", framework);
-      
+
       assertBundleState(Bundle.INSTALLED, framework.getState());
-      
+
       framework.start();
       assertBundleState(Bundle.ACTIVE, framework.getState());
-      
+
       framework.stop();
       assertBundleState(Bundle.ACTIVE, framework.getState());
-      
+
       framework.waitForStop(2000);
       assertBundleState(Bundle.RESOLVED, framework.getState());
    }
@@ -111,7 +108,7 @@ public class FrameworkLaunchTestCase extends OSGiFrameworkTest
       ServiceReference paRef = bc.getServiceReference(PackageAdmin.class.getName());
       PackageAdmin pa = (PackageAdmin)bc.getService(paRef);
       assertNotNull("The Package Admin service should be available", pa);
-      
+
       // It should be possible to install a bundle into this framework, even though it's only inited...
       InputStream bundleStream = toInputStream(assembleArchive("simple-bundle1", "/bundles/simple/simple-bundle1"));
       bc.installBundle("simple-bundle1", bundleStream);
@@ -123,11 +120,11 @@ public class FrameworkLaunchTestCase extends OSGiFrameworkTest
    @Test
    public void testNativeCodeExecPermission() throws Exception
    {
-      String tempFileName = System.getProperty("java.io.tmpdir") + 
+      String tempFileName = System.getProperty("java.io.tmpdir") +
          "/osgi_native" + System.currentTimeMillis() + ".test";
       File tempFile = new File(tempFileName);
-      
-      try 
+
+      try
       {
          Map<String, String> props = new HashMap<String, String>();
          props.put("org.osgi.framework.storage", "target/osgi-store");
@@ -135,7 +132,7 @@ public class FrameworkLaunchTestCase extends OSGiFrameworkTest
 
          // Execute this command for every native library found in the bundle
          props.put("org.osgi.framework.command.execpermission", "cp ${abspath} " + tempFileName);
-   
+
          FrameworkFactory factory = ServiceLoader.loadService(FrameworkFactory.class);
          Framework framework = factory.newFramework(props);
          framework.start();
@@ -152,27 +149,5 @@ public class FrameworkLaunchTestCase extends OSGiFrameworkTest
       {
          tempFile.delete();
       }
-   }
-
-   // temp
-   @Test
-   public void testURLHandling() throws Exception
-   {
-      Map<String, String> props = new HashMap<String, String>();
-      props.put("org.osgi.framework.storage", "target/osgi-store");
-      props.put("org.osgi.framework.storage.clean", "onFirstInit");
-
-      FrameworkFactory factory = ServiceLoader.loadService(FrameworkFactory.class);
-      Framework framework = factory.newFramework(props);
-      framework.start();
-
-      Field field = URL.class.getDeclaredField("factory");
-      field.setAccessible(true);
-      Object obj = field.get(null);
-      Method meth = obj.getClass().getDeclaredMethod("createURLStreamHandler", String.class);
-      meth.setAccessible(true);
-      Object h = meth.invoke(obj, "protocol1");
-      System.out.println("*** " + h);
-
    }
 }

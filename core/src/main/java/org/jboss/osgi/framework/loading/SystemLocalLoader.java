@@ -107,6 +107,15 @@ public class SystemLocalLoader implements LocalLoader
    @Override
    public List<Resource> loadResourceLocal(String name)
    {
+      // TODO, what do we do with this one?
+      // We need to provide the META-INF/service/java.net.URLStreamHandlerFactory
+      // resource to hook it in with the ModularURLStreamHandlerFactory
+      // but we cannot simply serve every single META-INF/service resource
+      // on the classpath because that's may too much! It will actually cause
+      // Arquillian to fail because it finds two test runners in that case...
+      if (!"META-INF/services/java.net.URLStreamHandlerFactory".equals(name))
+         return Collections.emptyList();
+
       Enumeration<URL> urls;
       try
       {
@@ -127,6 +136,10 @@ public class SystemLocalLoader implements LocalLoader
    @Override
    public Resource loadResourceLocal(String root, String name)
    {
+      // TODO see loadResourceLocal(String name)
+      if (!"META-INF/services/java.net.URLStreamHandlerFactory".equals(name))
+         return null;
+
       if (!"".equals(root))
          return null;
 

@@ -111,7 +111,7 @@ public class SystemPackagesPluginImpl extends AbstractPlugin implements SystemPa
 
          // SchemaFactoryFinder attempting to use the platform default XML Schema validator
          allPackages.add("com.sun.org.apache.xerces.internal.jaxp.validation");
-         
+
          // Only add non-jdk packages when running STANDALONE
          if (bundleManager.getIntegrationMode() == IntegrationMode.STANDALONE)
          {
