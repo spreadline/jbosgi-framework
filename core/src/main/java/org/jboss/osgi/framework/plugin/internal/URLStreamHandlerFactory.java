@@ -22,6 +22,8 @@
 package org.jboss.osgi.framework.plugin.internal;
 
 import java.io.IOException;
+import java.net.InetAddress;
+import java.net.Proxy;
 import java.net.URL;
 import java.net.URLConnection;
 import java.net.URLStreamHandler;
@@ -151,7 +153,7 @@ public class URLStreamHandlerFactory implements java.net.URLStreamHandlerFactory
       if (refList == null)
          return null;
       
-      return new URLStreamHandlerProxy(refList);
+      return new URLStreamHandlerProxy(protocol, refList);
    }
 
    private static final class URLStreamHandlerProxy extends URLStreamHandler implements URLStreamHandlerSetter
@@ -159,10 +161,12 @@ public class URLStreamHandlerFactory implements java.net.URLStreamHandlerFactory
       // This list is maintained in the ServiceTracker that tracks the URLStreamHandlerService
       // This proxy should always use to top element (if it contains any elements).
       private final List<ServiceReference> serviceReferences;
+      private final String protocol;
 
-      public URLStreamHandlerProxy(List<ServiceReference> refList)
+      public URLStreamHandlerProxy(String protocol, List<ServiceReference> refList)
       {
-         serviceReferences = refList;
+         this.protocol = protocol;
+         this.serviceReferences = refList;
       }
       
       @Override
@@ -183,39 +187,80 @@ public class URLStreamHandlerFactory implements java.net.URLStreamHandlerFactory
       @Override
       protected void parseURL(URL u, String spec, int start, int limit)
       {
-         synchronized (serviceReferences)
-         {
-            if (serviceReferences.isEmpty())
-               throw new IllegalStateException("No handlers in the OSGi Service registry for url:" + spec);
-
-            ServiceReference ref = serviceReferences.get(0);
-            Object service = ref.getBundle().getBundleContext().getService(ref);
-            if (service instanceof URLStreamHandlerService)
-            {
-               ((URLStreamHandlerService)service).parseURL(this, u, spec, start, limit);
-               return;
-            }            
-            throw new IllegalStateException("Problem with OSGi URL handler service " + service + " for url:" + spec);
-         }
+         getHandlerService().parseURL(this, u, spec, start, limit);
       }
 
       @Override
       protected URLConnection openConnection(URL u) throws IOException
       {
+         return getHandlerService().openConnection(u);
+      }
+
+      @Override
+      protected String toExternalForm(URL u)
+      {
+         return getHandlerService().toExternalForm(u);
+      }
+
+      @Override
+      protected URLConnection openConnection(URL u, Proxy p) throws IOException
+      {
+         // TODO via reflection: 
+         // return getHandlerService().openConnection(u, p);
+         return null;
+      }
+
+      @Override
+      protected int getDefaultPort()
+      {
+         return getHandlerService().getDefaultPort();
+      }
+
+      @Override
+      protected boolean equals(URL u1, URL u2)
+      {
+         return getHandlerService().equals(u1, u2);
+      }
+
+      @Override
+      protected int hashCode(URL u)
+      {
+         return getHandlerService().hashCode(u);
+      }
+
+      @Override
+      protected boolean sameFile(URL u1, URL u2)
+      {
+         return getHandlerService().sameFile(u1, u2);
+      }
+
+      @Override
+      protected synchronized InetAddress getHostAddress(URL u)
+      {
+         return getHandlerService().getHostAddress(u);
+      }
+
+      @Override
+      protected boolean hostsEqual(URL u1, URL u2)
+      {
+         return getHandlerService().hostsEqual(u1, u2);
+      }
+
+      private URLStreamHandlerService getHandlerService()
+      {
          synchronized (serviceReferences)
          {
             if (serviceReferences.isEmpty())
-               return null;
-            
+               throw new IllegalStateException("No handlers in the OSGi Service registry for protocol: " + protocol);
+
             ServiceReference ref = serviceReferences.get(0);
             Object service = ref.getBundle().getBundleContext().getService(ref);
             if (service instanceof URLStreamHandlerService)
             {
-               return ((URLStreamHandlerService)service).openConnection(u);
+               return (URLStreamHandlerService)service;
             }
-            return null;
+            throw new IllegalStateException("Problem with OSGi URL handler service " + service + " for url:" + protocol);
          }
       }
-
    }
 }
