@@ -35,8 +35,10 @@ import java.net.URLConnection;
 import java.util.Dictionary;
 import java.util.Hashtable;
 
+import org.jboss.osgi.framework.Constants;
 import org.jboss.osgi.testing.OSGiFrameworkTest;
 import org.junit.Test;
+import org.osgi.framework.ServiceRegistration;
 import org.osgi.service.url.AbstractURLStreamHandlerService;
 import org.osgi.service.url.URLConstants;
 import org.osgi.service.url.URLStreamHandlerService;
@@ -52,7 +54,7 @@ public class URLHandlerTestCase extends OSGiFrameworkTest
       URLStreamHandlerService protocol1Svc = new TestURLStreamHandlerService("test_protocol1");
       Dictionary<String, Object> props1 = new Hashtable<String, Object>();
       props1.put(URLConstants.URL_HANDLER_PROTOCOL, "protocol1");
-      getSystemContext().registerService(URLStreamHandlerService.class.getName(), protocol1Svc, props1);
+      ServiceRegistration reg1 = getSystemContext().registerService(URLStreamHandlerService.class.getName(), protocol1Svc, props1);
       
       URLStreamHandlerService protocol2Svc = new TestURLStreamHandlerService("test_protocol2");
       Dictionary<String, Object> props2 = new Hashtable<String, Object>();
@@ -77,8 +79,69 @@ public class URLHandlerTestCase extends OSGiFrameworkTest
       {
          // good
       }
+
+      reg1.unregister();
+      try
+      {
+         new URL("protocol1://foobar");
+         fail("protocol1 is now unregistered so a URL containing this protocol should throw a MalformedURLException.");
+      }
+      catch (MalformedURLException mue)
+      {
+         // good
+      }
    }
 
+   @Test
+   public void testServiceRanking() throws Exception
+   {
+      URLStreamHandlerService svc1 = new TestURLStreamHandlerService("tp1");
+      Dictionary<String, Object> props1 = new Hashtable<String, Object>();
+      props1.put(URLConstants.URL_HANDLER_PROTOCOL, "p1");
+      props1.put(Constants.SERVICE_RANKING, 10);
+      getSystemContext().registerService(URLStreamHandlerService.class.getName(), svc1, props1);
+
+      URLStreamHandlerService svc2 = new TestURLStreamHandlerService("tp2");
+      Dictionary<String, Object> props2 = new Hashtable<String, Object>();
+      props2.put(URLConstants.URL_HANDLER_PROTOCOL, "p1");
+      props2.put(Constants.SERVICE_RANKING, 15);
+      ServiceRegistration reg2 = getSystemContext().registerService(URLStreamHandlerService.class.getName(), svc2, props2);
+
+      URLStreamHandlerService svc3 = new TestURLStreamHandlerService("tp3");
+      Dictionary<String, Object> props3 = new Hashtable<String, Object>();
+      props3.put(URLConstants.URL_HANDLER_PROTOCOL, "p1");
+      props3.put(Constants.SERVICE_RANKING, 5);
+      ServiceRegistration reg3 = getSystemContext().registerService(URLStreamHandlerService.class.getName(), svc3, props3);
+
+      URL url = new URL("p1://testing");
+      assertEquals("tp2testing", new String(suckStream(url.openStream())));
+
+      reg2.unregister();
+      URL url2 = new URL("p1://testing");
+      assertEquals("tp1testing", new String(suckStream(url2.openStream())));
+
+      reg3.unregister();
+      URL url3 = new URL("p1://testing");
+      assertEquals("tp1testing", new String(suckStream(url3.openStream())));
+
+      URLStreamHandlerService svc4 = new TestURLStreamHandlerService("tp4");
+      Dictionary<String, Object> props4 = new Hashtable<String, Object>();
+      props4.put(URLConstants.URL_HANDLER_PROTOCOL, "p1");
+      props4.put(Constants.SERVICE_RANKING, 7);
+      getSystemContext().registerService(URLStreamHandlerService.class.getName(), svc4, props4);
+
+      URL url4 = new URL("p1://testing");
+      assertEquals("tp1testing", new String(suckStream(url4.openStream())));
+
+      URLStreamHandlerService svc5 = new TestURLStreamHandlerService("tp5");
+      Dictionary<String, Object> props5 = new Hashtable<String, Object>();
+      props5.put(URLConstants.URL_HANDLER_PROTOCOL, "p1");
+      props5.put(Constants.SERVICE_RANKING, 11);
+      getSystemContext().registerService(URLStreamHandlerService.class.getName(), svc5, props5);
+
+      URL url5 = new URL("p1://testing");
+      assertEquals("tp5testing", new String(suckStream(url5.openStream())));
+   }
 
    public static void pumpStream(InputStream is, OutputStream os) throws IOException
    {

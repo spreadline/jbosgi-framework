@@ -25,16 +25,21 @@ import java.io.IOException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.net.URLStreamHandler;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Iterator;
-import java.util.Map;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 import org.jboss.logging.Logger;
+import org.jboss.osgi.framework.bundle.ServiceReferenceComparator;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.ServiceReference;
 import org.osgi.service.url.URLConstants;
 import org.osgi.service.url.URLStreamHandlerService;
+import org.osgi.service.url.URLStreamHandlerSetter;
 import org.osgi.util.tracker.ServiceTracker;
 
 /**
@@ -46,7 +51,7 @@ public class URLStreamHandlerFactory implements java.net.URLStreamHandlerFactory
 
    final Logger log = Logger.getLogger(URLStreamHandlerFactory.class);
    private final ServiceTracker tracker;
-   private Map<String, URLStreamHandlerService> handlers = new ConcurrentHashMap<String, URLStreamHandlerService>();
+   private ConcurrentMap<String, List<ServiceReference>> handlers = new ConcurrentHashMap<String, List<ServiceReference>>();
 
    static void setSystemBundleContext(BundleContext bc)
    {
@@ -69,7 +74,15 @@ public class URLStreamHandlerFactory implements java.net.URLStreamHandlerFactory
             if (protocols != null && svc instanceof URLStreamHandlerService)
             {
                for (String protocol : protocols)
-                  handlers.put(protocol, (URLStreamHandlerService)svc);
+               {
+                  handlers.putIfAbsent(protocol, new ArrayList<ServiceReference>());
+                  List<ServiceReference> list = handlers.get(protocol);
+                  synchronized (list)
+                  {
+                     list.add(reference);
+                     Collections.sort(list, Collections.reverseOrder(ServiceReferenceComparator.getInstance()));
+                  }
+               }
             }
             else
             {
@@ -92,13 +105,18 @@ public class URLStreamHandlerFactory implements java.net.URLStreamHandlerFactory
          {
             super.removedService(reference, service);
 
-            for (Iterator<URLStreamHandlerService> it = handlers.values().iterator(); it.hasNext();)
+            for (List<ServiceReference> list : handlers.values())
             {
-               URLStreamHandlerService svc = it.next();
-               if (service.equals(svc))
+               synchronized (list)
                {
-                  it.remove();
-                  break;
+                  for (Iterator<ServiceReference> it = list.iterator(); it.hasNext();)
+                  {
+                     if (it.next().equals(reference))
+                     {
+                        it.remove();
+                        break;
+                     }
+                  }
                }
             }
          }
@@ -129,17 +147,75 @@ public class URLStreamHandlerFactory implements java.net.URLStreamHandlerFactory
    @Override
    public URLStreamHandler createURLStreamHandler(String protocol)
    {
-      final URLStreamHandlerService handlerService = handlers.get(protocol);
-      if (handlerService == null) 
+      List<ServiceReference> refList = handlers.get(protocol);
+      if (refList == null)
          return null;
       
-      return new URLStreamHandler()
+      return new URLStreamHandlerProxy(refList);
+   }
+
+   private static final class URLStreamHandlerProxy extends URLStreamHandler implements URLStreamHandlerSetter
+   {
+      // This list is maintained in the ServiceTracker that tracks the URLStreamHandlerService
+      // This proxy should always use to top element (if it contains any elements).
+      private final List<ServiceReference> serviceReferences;
+
+      public URLStreamHandlerProxy(List<ServiceReference> refList)
       {
-         @Override
-         protected URLConnection openConnection(URL u) throws IOException
+         serviceReferences = refList;
+      }
+      
+      @Override
+      public void setURL(URL u, String protocol, String host, int port, String authority, String userInfo, String path, String query, String ref)
+      {
+         // Made public to implement URLStreamHandlerSetter
+         super.setURL(u, protocol, host, port, authority, userInfo, path, query, ref);
+      }
+
+      @Override
+      @SuppressWarnings("deprecation")
+      public void setURL(URL u, String protocol, String host, int port, String file, String ref)
+      {
+         // Made public to implement URLStreamHandlerSetter
+         super.setURL(u, protocol, host, port, file, ref);
+      }
+
+      @Override
+      protected void parseURL(URL u, String spec, int start, int limit)
+      {
+         synchronized (serviceReferences)
          {
-            return handlerService.openConnection(u);
+            if (serviceReferences.isEmpty())
+               throw new IllegalStateException("No handlers in the OSGi Service registry for url:" + spec);
+
+            ServiceReference ref = serviceReferences.get(0);
+            Object service = ref.getBundle().getBundleContext().getService(ref);
+            if (service instanceof URLStreamHandlerService)
+            {
+               ((URLStreamHandlerService)service).parseURL(this, u, spec, start, limit);
+               return;
+            }            
+            throw new IllegalStateException("Problem with OSGi URL handler service " + service + " for url:" + spec);
          }
-      };
+      }
+
+      @Override
+      protected URLConnection openConnection(URL u) throws IOException
+      {
+         synchronized (serviceReferences)
+         {
+            if (serviceReferences.isEmpty())
+               return null;
+            
+            ServiceReference ref = serviceReferences.get(0);
+            Object service = ref.getBundle().getBundleContext().getService(ref);
+            if (service instanceof URLStreamHandlerService)
+            {
+               return ((URLStreamHandlerService)service).openConnection(u);
+            }
+            return null;
+         }
+      }
+
    }
 }
